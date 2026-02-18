@@ -1,0 +1,19 @@
+{% set now = now if now is defined else data.now %}
+{% set weather = weather if weather is defined else data.weather %}
+{% set weather_error = weather_error if weather_error is defined else data.weather_error %}
+
+<div class="header-content">
+    <span class="header-date">
+        {{ now.strftime('%a %d %b') }}
+    </span>
+
+    <span class="header-weather">
+        {% if weather %}
+            {{ weather.current_temp_c | int }}°C {{ weather.current_emoji }} {{ weather.current_description }}
+        {% elif weather_error %}
+            <span class="error-text">Weather unavailable</span>
+        {% endif %}
+    </span>
+
+    <span id="clock" class="header-clock">--:--</span>
+</div>

@@ -1,0 +1,18 @@
+{% set weather = weather if weather is defined else data.weather %}
+{% set weather_error = weather_error if weather_error is defined else data.weather_error %}
+
+{% if weather_error %}
+    <p class="error-text">Hourly forecast unavailable</p>
+{% elif weather %}
+    <div class="weather-hours">
+        {% for hour in weather.hourly[:8] %}
+            <div class="weather-hour">
+                <span class="hour-time">{{ '%02d' | format(hour.hour) }}:00</span>
+                <span class="hour-emoji">{{ hour.emoji }}</span>
+                <span class="hour-temp">{{ hour.temperature_c | int }}°</span>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p class="no-data">Loading...</p>
+{% endif %}

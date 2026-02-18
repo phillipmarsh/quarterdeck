@@ -1,0 +1,32 @@
+{% set agenda = agenda if agenda is defined else data.agenda %}
+{% set agenda_error = agenda_error if agenda_error is defined else data.agenda_error %}
+
+<div class="panel-header">
+    <h2>Today</h2>
+</div>
+
+{% if agenda_error %}
+    <p class="error-text">Calendar unavailable</p>
+{% elif agenda %}
+    <div class="events-list">
+        {% for event in agenda.events %}
+            <div class="event {% if event.is_all_day %}all-day{% endif %}">
+                {% if event.is_all_day %}
+                    <span class="event-time all-day-badge">All day</span>
+                {% else %}
+                    <span class="event-time">{{ event.start.strftime('%H:%M') }}</span>
+                {% endif %}
+                <span class="event-summary">{{ event.summary }}</span>
+                {% if event.location %}
+                    <span class="event-location">{{ event.location }}</span>
+                {% endif %}
+            </div>
+        {% else %}
+            <p class="no-data">No events today</p>
+        {% endfor %}
+    </div>
+
+    <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+{% else %}
+    <p class="no-data">Loading...</p>
+{% endif %}

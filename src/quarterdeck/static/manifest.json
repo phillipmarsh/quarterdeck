@@ -1,0 +1,10 @@
+{
+    "name": "Quarterdeck",
+    "short_name": "Quarterdeck",
+    "description": "Hallway dashboard — weather, trains, calendar",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "landscape",
+    "background_color": "#0a1628",
+    "theme_color": "#0a1628"
+}

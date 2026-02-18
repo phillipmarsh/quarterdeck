@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quarterdeck">
+    <meta name="theme-color" content="#0a1628">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/style.css">
+    <title>Quarterdeck</title>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header: polls every 5 minutes (weather cache is 30 min) -->
+        <header
+            id="header"
+            hx-get="/partials/header"
+            hx-trigger="every 300s"
+            hx-swap="innerHTML"
+        >
+            {% include "partials/header.html" %}
+        </header>
+
+        <!-- Main content grid -->
+        <main class="main-grid">
+            <!-- Trains panel: polls every 30 seconds -->
+            <section
+                id="trains-panel"
+                class="panel trains-panel"
+                hx-get="/partials/trains?mode=filtered"
+                hx-trigger="every 30s"
+                hx-swap="innerHTML"
+            >
+                {% include "partials/trains.html" %}
+            </section>
+
+            <!-- Calendar panel: polls every 5 minutes -->
+            <section
+                id="calendar-panel"
+                class="panel calendar-panel"
+                hx-get="/partials/calendar"
+                hx-trigger="every 300s"
+                hx-swap="innerHTML"
+            >
+                {% include "partials/calendar.html" %}
+            </section>
+        </main>
+
+        <!-- Weather strip: polls every 30 minutes -->
+        <footer
+            id="weather-strip"
+            hx-get="/partials/weather"
+            hx-trigger="every 1800s"
+            hx-swap="innerHTML"
+        >
+            {% include "partials/weather_strip.html" %}
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+    <script>
+        // Client-side clock — always works regardless of backend state
+        function updateClock() {
+            const now = new Date();
+            const el = document.getElementById('clock');
+            if (el) {
+                el.textContent = now.toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            }
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Train toggle: swap mode and update the polling URL
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'trains-panel') {
+                const panel = evt.detail.target;
+                const toggleBtn = panel.querySelector('[data-train-mode]');
+                if (toggleBtn) {
+                    const newMode = toggleBtn.getAttribute('data-train-mode');
+                    panel.setAttribute('hx-get', '/partials/trains?mode=' + newMode);
+                    htmx.process(panel);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

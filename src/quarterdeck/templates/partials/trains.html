@@ -1,0 +1,76 @@
+{% set trains = trains if trains is defined else data.trains %}
+{% set trains_error = trains_error if trains_error is defined else data.trains_error %}
+{% set mode = mode if mode is defined else "filtered" %}
+
+<div class="panel-header">
+    <h2>Trains</h2>
+    {% if mode == "filtered" %}
+        <button
+            class="toggle-btn"
+            data-train-mode="all"
+            hx-get="/partials/trains?mode=all"
+            hx-target="#trains-panel"
+            hx-swap="innerHTML"
+        >All departures</button>
+    {% else %}
+        <button
+            class="toggle-btn"
+            data-train-mode="filtered"
+            hx-get="/partials/trains?mode=filtered"
+            hx-target="#trains-panel"
+            hx-swap="innerHTML"
+        >By destination</button>
+    {% endif %}
+</div>
+
+{% if trains_error %}
+    <p class="error-text">Train data unavailable</p>
+{% elif trains %}
+    {% if mode == "all" %}
+        <div class="departures-list">
+            {% for dep in trains.all_departures[:8] %}
+                <div class="departure {{ dep.status.value }}">
+                    <span class="dep-time">{{ dep.scheduled.strftime('%H:%M') }}</span>
+                    <span class="dep-dest">{{ dep.destination }}</span>
+                    {% if dep.status.value == "cancelled" %}
+                        <span class="dep-status cancelled">Cancelled</span>
+                    {% elif dep.status.value == "late" %}
+                        <span class="dep-status late">Exp {{ dep.expected.strftime('%H:%M') }}</span>
+                    {% else %}
+                        <span class="dep-status on-time">({{ dep.minutes_away }} min)</span>
+                    {% endif %}
+                    {% if dep.platform %}
+                        <span class="dep-platform">P{{ dep.platform }}</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        {% for group in trains.destination_groups %}
+            <div class="destination-group">
+                <h3>→ {{ group.destination_name }}</h3>
+                {% for dep in group.departures[:4] %}
+                    <div class="departure {{ dep.status.value }}">
+                        <span class="dep-time">{{ dep.scheduled.strftime('%H:%M') }}</span>
+                        {% if dep.status.value == "cancelled" %}
+                            <span class="dep-status cancelled">Cancelled</span>
+                        {% elif dep.status.value == "late" %}
+                            <span class="dep-status late">Exp {{ dep.expected.strftime('%H:%M') }}</span>
+                        {% else %}
+                            <span class="dep-status on-time">({{ dep.minutes_away }} min)</span>
+                        {% endif %}
+                        {% if dep.platform %}
+                            <span class="dep-platform">P{{ dep.platform }}</span>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <p class="no-data">No departures</p>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <p class="last-updated">Updated {{ trains.fetched_at.strftime('%H:%M:%S') }}</p>
+{% else %}
+    <p class="no-data">Loading...</p>
+{% endif %}
