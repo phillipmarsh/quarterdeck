@@ -60,6 +60,8 @@ class CalendarEvent(BaseModel):
 class TodayAgenda(BaseModel):
     events: list[CalendarEvent]
     fetched_at: datetime
+    feed_count: int = 0
+    failed_feed_count: int = 0
 
 
 class DashboardData(BaseModel):

@@ -1,11 +1,17 @@
 from datetime import UTC, date, datetime
 
 import httpx
+import pytest
 import respx
 import time_machine
 
 from quarterdeck.models import CalendarEvent
-from quarterdeck.services.calendar import _parse_ical_events, _sort_events, fetch_agenda
+from quarterdeck.services.calendar import (
+    CalendarFeedError,
+    _parse_ical_events,
+    _sort_events,
+    fetch_agenda,
+)
 
 ICAL_TIMED_EVENT = """\
 BEGIN:VCALENDAR
@@ -172,13 +178,18 @@ class TestFetchAgenda:
         import quarterdeck.services.calendar as cal_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod, "settings",
-            type("S", (), {
-                "feed_url_list": [
-                    "https://cal.example.com/feed1.ics",
-                    "https://cal.example.com/feed2.ics",
-                ],
-            })(),
+            cal_mod,
+            "settings",
+            type(
+                "S",
+                (),
+                {
+                    "feed_url_list": [
+                        "https://cal.example.com/feed1.ics",
+                        "https://cal.example.com/feed2.ics",
+                    ],
+                },
+            )(),
         )
 
         feed1 = """\
@@ -221,13 +232,18 @@ END:VCALENDAR
         import quarterdeck.services.calendar as cal_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod, "settings",
-            type("S", (), {
-                "feed_url_list": [
-                    "https://cal.example.com/broken.ics",
-                    "https://cal.example.com/good.ics",
-                ],
-            })(),
+            cal_mod,
+            "settings",
+            type(
+                "S",
+                (),
+                {
+                    "feed_url_list": [
+                        "https://cal.example.com/broken.ics",
+                        "https://cal.example.com/good.ics",
+                    ],
+                },
+            )(),
         )
 
         good_feed = """\
@@ -239,9 +255,7 @@ DTEND:20260217T100000Z
 END:VEVENT
 END:VCALENDAR
 """
-        respx.get("https://cal.example.com/broken.ics").mock(
-            return_value=httpx.Response(500)
-        )
+        respx.get("https://cal.example.com/broken.ics").mock(return_value=httpx.Response(500))
         respx.get("https://cal.example.com/good.ics").mock(
             return_value=httpx.Response(200, text=good_feed)
         )
@@ -250,3 +264,53 @@ END:VCALENDAR
 
         assert len(agenda.events) == 1
         assert agenda.events[0].summary == "Working event"
+        assert agenda.feed_count == 2
+        assert agenda.failed_feed_count == 1
+
+    @time_machine.travel("2026-02-17T10:00:00Z")
+    @respx.mock
+    async def test_raises_when_all_feeds_fail(self, monkeypatch: object) -> None:
+        """Given every configured feed failing, when fetched,
+        then CalendarFeedError is raised rather than an empty agenda returned.
+        """
+        import quarterdeck.services.calendar as cal_mod
+
+        monkeypatch.setattr(  # type: ignore[attr-defined]
+            cal_mod,
+            "settings",
+            type(
+                "S",
+                (),
+                {
+                    "feed_url_list": [
+                        "https://cal.example.com/broken1.ics",
+                        "https://cal.example.com/broken2.ics",
+                    ],
+                },
+            )(),
+        )
+
+        respx.get("https://cal.example.com/broken1.ics").mock(return_value=httpx.Response(500))
+        respx.get("https://cal.example.com/broken2.ics").mock(return_value=httpx.Response(401))
+
+        with pytest.raises(CalendarFeedError):
+            await fetch_agenda()
+
+    @time_machine.travel("2026-02-17T10:00:00Z")
+    async def test_returns_unconfigured_agenda_when_no_feeds(self, monkeypatch: object) -> None:
+        """Given no configured feeds, when fetched,
+        then an empty agenda with a zero feed count is returned.
+        """
+        import quarterdeck.services.calendar as cal_mod
+
+        monkeypatch.setattr(  # type: ignore[attr-defined]
+            cal_mod,
+            "settings",
+            type("S", (), {"feed_url_list": []})(),
+        )
+
+        agenda = await fetch_agenda()
+
+        assert agenda.events == []
+        assert agenda.feed_count == 0
+        assert agenda.failed_feed_count == 0

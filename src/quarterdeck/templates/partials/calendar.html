@@ -8,25 +8,34 @@
 {% if agenda_error %}
     <p class="error-text">Calendar unavailable</p>
 {% elif agenda %}
-    <div class="events-list">
-        {% for event in agenda.events %}
-            <div class="event {% if event.is_all_day %}all-day{% endif %}">
-                {% if event.is_all_day %}
-                    <span class="event-time all-day-badge">All day</span>
-                {% else %}
-                    <span class="event-time">{{ event.start.strftime('%H:%M') }}</span>
-                {% endif %}
-                <span class="event-summary">{{ event.summary }}</span>
-                {% if event.location %}
-                    <span class="event-location">{{ event.location }}</span>
-                {% endif %}
-            </div>
-        {% else %}
-            <p class="no-data">No events today</p>
-        {% endfor %}
-    </div>
+    {% if agenda.feed_count == 0 %}
+        <p class="error-text">No calendar feeds configured</p>
+    {% else %}
+        {% if agenda.failed_feed_count > 0 %}
+            <p class="error-text">
+                {{ agenda.failed_feed_count }} of {{ agenda.feed_count }} calendar feeds unreachable
+            </p>
+        {% endif %}
+        <div class="events-list">
+            {% for event in agenda.events %}
+                <div class="event {% if event.is_all_day %}all-day{% endif %}">
+                    {% if event.is_all_day %}
+                        <span class="event-time all-day-badge">All day</span>
+                    {% else %}
+                        <span class="event-time">{{ event.start.strftime('%H:%M') }}</span>
+                    {% endif %}
+                    <span class="event-summary">{{ event.summary }}</span>
+                    {% if event.location %}
+                        <span class="event-location">{{ event.location }}</span>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p class="no-data">No events today</p>
+            {% endfor %}
+        </div>
 
-    <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+        <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+    {% endif %}
 {% else %}
     <p class="no-data">Loading...</p>
 {% endif %}

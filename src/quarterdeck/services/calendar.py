@@ -11,6 +11,14 @@ from quarterdeck.models import CalendarEvent, TodayAgenda
 _cache: TTLCache[str, TodayAgenda] = TTLCache(maxsize=1, ttl=300)  # 5 min
 
 
+class CalendarFeedError(Exception):
+    """Raised when no configured iCal feed could be fetched.
+
+    Distinguishes an unreachable calendar from a genuinely empty day,
+    so the dashboard can show an error rather than "No events today".
+    """
+
+
 def _parse_ical_events(cal_data: str, today: date) -> list[CalendarEvent]:
     """Parse iCal data and return events for the given date."""
     cal = icalendar.Calendar.from_ical(cal_data)
@@ -91,6 +99,7 @@ async def fetch_agenda() -> TodayAgenda:
 
     today = date.today()
     all_events: list[CalendarEvent] = []
+    failed_feed_count = 0
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         for url in feed_urls:
@@ -102,9 +111,18 @@ async def fetch_agenda() -> TodayAgenda:
                 all_events.extend(events)
             except Exception:
                 logger.exception("Failed to fetch iCal feed: {}", url[:60])
+                failed_feed_count += 1
                 continue
 
+    if failed_feed_count == len(feed_urls):
+        raise CalendarFeedError(f"All {len(feed_urls)} configured iCal feed(s) failed to fetch")
+
     sorted_events = _sort_events(all_events)
-    agenda = TodayAgenda(events=sorted_events, fetched_at=datetime.now(tz=UTC))
+    agenda = TodayAgenda(
+        events=sorted_events,
+        fetched_at=datetime.now(tz=UTC),
+        feed_count=len(feed_urls),
+        failed_feed_count=failed_feed_count,
+    )
     _cache["agenda"] = agenda
     return agenda

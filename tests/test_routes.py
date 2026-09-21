@@ -23,12 +23,18 @@ MOCK_WEATHER = WeatherForecast(
     current_emoji="⛅",
     hourly=[
         HourlyWeather(
-            hour=10, temperature_c=10, weather_code=3,
-            description="Overcast", emoji="☁️",
+            hour=10,
+            temperature_c=10,
+            weather_code=3,
+            description="Overcast",
+            emoji="☁️",
         ),
         HourlyWeather(
-            hour=11, temperature_c=11, weather_code=61,
-            description="Slight rain", emoji="🌧️",
+            hour=11,
+            temperature_c=11,
+            weather_code=61,
+            description="Slight rain",
+            emoji="🌧️",
         ),
     ],
     fetched_at=datetime(2026, 2, 17, 10, 0, tzinfo=UTC),
@@ -80,6 +86,7 @@ MOCK_AGENDA = TodayAgenda(
         ),
     ],
     fetched_at=datetime(2026, 2, 17, 10, 0, tzinfo=UTC),
+    feed_count=1,
 )
 
 _PATCH_WEATHER = "quarterdeck.routes.dashboard.fetch_weather"
@@ -194,9 +201,7 @@ class TestPartialRoutes:
         new_callable=AsyncMock,
         side_effect=Exception("API error"),
     )
-    def test_header_partial_handles_error(
-        self, mock_weather: AsyncMock
-    ) -> None:
+    def test_header_partial_handles_error(self, mock_weather: AsyncMock) -> None:
         """Given a weather error, when GET /partials/header,
         then the error message renders.
         """
