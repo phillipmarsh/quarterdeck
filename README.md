@@ -46,6 +46,18 @@ All configuration is via environment variables (see `.env.example`):
 | `WEATHER_LONGITUDE` | Weather location longitude | `-0.0492` |
 | `ICAL_FEED_URLS` | Comma-separated iCal feed URLs | |
 
+Note: iCal URLs must use `https://` — replace any `webcal://` prefix.
+
+## Data refresh
+
+Data is fetched by background loops, not per request: weather every
+30 minutes, trains every 30 seconds, calendar every 5 minutes. If a
+refresh fails, panels keep showing the last good data with an
+"As of HH:MM" marker, and the source retries on a shorter interval
+until it recovers. A panel only shows an error when a source has
+never succeeded — including a "check RTT credentials" hint when the
+trains API rejects the configured credentials.
+
 ## Deploy to Raspberry Pi
 
 ### 1. Get the code onto the Pi

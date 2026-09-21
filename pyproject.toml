@@ -17,7 +17,6 @@ dependencies = [
     "loguru>=0.7.0",
     "icalendar>=6.1.0",
     "python-dateutil>=2.9.0",
-    "cachetools>=5.5.0",
 ]
 
 [dependency-groups]

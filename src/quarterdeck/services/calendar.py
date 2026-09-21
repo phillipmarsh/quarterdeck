@@ -1,14 +1,12 @@
+import asyncio
 from datetime import UTC, date, datetime
 
 import httpx
 import icalendar
-from cachetools import TTLCache
 from loguru import logger
 
 from quarterdeck.config import settings
 from quarterdeck.models import CalendarEvent, TodayAgenda
-
-_cache: TTLCache[str, TodayAgenda] = TTLCache(maxsize=1, ttl=300)  # 5 min
 
 
 class CalendarFeedError(Exception):
@@ -86,43 +84,48 @@ def _sort_events(events: list[CalendarEvent]) -> list[CalendarEvent]:
     return sorted(events, key=sort_key)
 
 
-async def fetch_agenda() -> TodayAgenda:
-    """Fetch and merge calendar events from all configured iCal feeds."""
-    cached = _cache.get("agenda")
-    if cached is not None:
-        return cached
+async def _fetch_feed(client: httpx.AsyncClient, url: str, today: date) -> list[CalendarEvent]:
+    logger.info("Fetching iCal feed: {}", url[:60])
+    response = await client.get(url)
+    response.raise_for_status()
+    return _parse_ical_events(response.text, today)
 
+
+async def fetch_agenda() -> TodayAgenda:
+    """Fetch and merge calendar events from all configured iCal feeds.
+
+    Feeds are fetched concurrently so one slow feed cannot hold up the
+    rest. A feed that fails is counted rather than fatal, unless every
+    feed fails — an unreachable calendar must not masquerade as a free day.
+    """
     feed_urls = settings.feed_url_list
     if not feed_urls:
         logger.warning("No iCal feed URLs configured")
         return TodayAgenda(events=[], fetched_at=datetime.now(tz=UTC))
 
     today = date.today()
-    all_events: list[CalendarEvent] = []
-    failed_feed_count = 0
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        for url in feed_urls:
-            try:
-                logger.info("Fetching iCal feed: {}", url[:60])
-                response = await client.get(url)
-                response.raise_for_status()
-                events = _parse_ical_events(response.text, today)
-                all_events.extend(events)
-            except Exception:
-                logger.exception("Failed to fetch iCal feed: {}", url[:60])
-                failed_feed_count += 1
-                continue
+        results = await asyncio.gather(
+            *(_fetch_feed(client, url, today) for url in feed_urls),
+            return_exceptions=True,
+        )
+
+    all_events: list[CalendarEvent] = []
+    failed_feed_count = 0
+    for url, result in zip(feed_urls, results, strict=True):
+        if isinstance(result, BaseException):
+            logger.error("Failed to fetch iCal feed {}: {}", url[:60], result)
+            failed_feed_count += 1
+            continue
+        all_events.extend(result)
 
     if failed_feed_count == len(feed_urls):
         raise CalendarFeedError(f"All {len(feed_urls)} configured iCal feed(s) failed to fetch")
 
-    sorted_events = _sort_events(all_events)
-    agenda = TodayAgenda(
-        events=sorted_events,
+    return TodayAgenda(
+        events=_sort_events(all_events),
         fetched_at=datetime.now(tz=UTC),
         feed_count=len(feed_urls),
         failed_feed_count=failed_feed_count,
     )
-    _cache["agenda"] = agenda
-    return agenda

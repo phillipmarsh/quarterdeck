@@ -312,6 +312,13 @@ footer {
     margin-top: 0.5rem;
 }
 
+/* Stale data marker: shown when a panel is serving its last good
+   result while the source is failing to refresh */
+.last-updated.stale {
+    color: var(--amber-dim);
+    font-style: italic;
+}
+
 /* HTMX loading indicator */
 .htmx-request .htmx-indicator {
     opacity: 1;

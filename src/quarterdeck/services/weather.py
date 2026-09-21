@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import httpx
-from cachetools import TTLCache
 from loguru import logger
 
 from quarterdeck.config import settings
@@ -40,8 +39,6 @@ WMO_CODES: dict[int, tuple[str, str]] = {
     99: ("Thunderstorm with heavy hail", "⛈️"),
 }
 
-_cache: TTLCache[str, WeatherForecast] = TTLCache(maxsize=1, ttl=1800)  # 30 min
-
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
 
@@ -51,10 +48,6 @@ def _decode_wmo(code: int) -> tuple[str, str]:
 
 async def fetch_weather() -> WeatherForecast:
     """Fetch hourly weather forecast from Open-Meteo for the configured location."""
-    cached = _cache.get("weather")
-    if cached is not None:
-        return cached
-
     logger.info("Fetching weather from Open-Meteo")
 
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -100,13 +93,10 @@ async def fetch_weather() -> WeatherForecast:
             )
         )
 
-    forecast = WeatherForecast(
+    return WeatherForecast(
         current_temp_c=round(current["temperature_2m"]),
         current_description=current_desc,
         current_emoji=current_emoji,
         hourly=hourly,
         fetched_at=now,
     )
-
-    _cache["weather"] = forecast
-    return forecast

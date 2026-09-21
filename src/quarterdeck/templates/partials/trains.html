@@ -1,5 +1,3 @@
-{% set trains = trains if trains is defined else data.trains %}
-{% set trains_error = trains_error if trains_error is defined else data.trains_error %}
 {% set mode = mode if mode is defined else "filtered" %}
 
 <div class="panel-header">
@@ -23,12 +21,10 @@
     {% endif %}
 </div>
 
-{% if trains_error %}
-    <p class="error-text">Train data unavailable</p>
-{% elif trains %}
+{% if trains.data %}
     {% if mode == "all" %}
         <div class="departures-list">
-            {% for dep in trains.all_departures[:8] %}
+            {% for dep in trains.data.all_departures[:8] %}
                 <div class="departure {{ dep.status.value }}">
                     <span class="dep-time">{{ dep.scheduled.strftime('%H:%M') }}</span>
                     <span class="dep-dest">{{ dep.destination }}</span>
@@ -46,7 +42,7 @@
             {% endfor %}
         </div>
     {% else %}
-        {% for group in trains.destination_groups %}
+        {% for group in trains.data.destination_groups %}
             <div class="destination-group">
                 <h3>→ {{ group.destination_name }}</h3>
                 {% for dep in group.departures[:4] %}
@@ -70,7 +66,15 @@
         {% endfor %}
     {% endif %}
 
-    <p class="last-updated">Updated {{ trains.fetched_at.strftime('%H:%M:%S') }}</p>
+    {% if trains.is_stale %}
+        <p class="last-updated stale">As of {{ trains.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+    {% else %}
+        <p class="last-updated">Updated {{ trains.fetched_at.strftime('%H:%M:%S') }}</p>
+    {% endif %}
+{% elif trains.error %}
+    <p class="error-text">
+        Train data unavailable{% if trains.error_kind == 'auth' %} — check RTT credentials{% endif %}
+    </p>
 {% else %}
     <p class="no-data">Loading...</p>
 {% endif %}

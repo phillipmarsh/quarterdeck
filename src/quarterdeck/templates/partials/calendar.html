@@ -1,23 +1,18 @@
-{% set agenda = agenda if agenda is defined else data.agenda %}
-{% set agenda_error = agenda_error if agenda_error is defined else data.agenda_error %}
-
 <div class="panel-header">
     <h2>Today</h2>
 </div>
 
-{% if agenda_error %}
-    <p class="error-text">Calendar unavailable</p>
-{% elif agenda %}
-    {% if agenda.feed_count == 0 %}
+{% if agenda.data %}
+    {% if agenda.data.feed_count == 0 %}
         <p class="error-text">No calendar feeds configured</p>
     {% else %}
-        {% if agenda.failed_feed_count > 0 %}
+        {% if agenda.data.failed_feed_count > 0 %}
             <p class="error-text">
-                {{ agenda.failed_feed_count }} of {{ agenda.feed_count }} calendar feeds unreachable
+                {{ agenda.data.failed_feed_count }} of {{ agenda.data.feed_count }} calendar feeds unreachable
             </p>
         {% endif %}
         <div class="events-list">
-            {% for event in agenda.events %}
+            {% for event in agenda.data.events %}
                 <div class="event {% if event.is_all_day %}all-day{% endif %}">
                     {% if event.is_all_day %}
                         <span class="event-time all-day-badge">All day</span>
@@ -34,8 +29,14 @@
             {% endfor %}
         </div>
 
-        <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+        {% if agenda.is_stale %}
+            <p class="last-updated stale">As of {{ agenda.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+        {% else %}
+            <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+        {% endif %}
     {% endif %}
+{% elif agenda.error %}
+    <p class="error-text">Calendar unavailable</p>
 {% else %}
     <p class="no-data">Loading...</p>
 {% endif %}

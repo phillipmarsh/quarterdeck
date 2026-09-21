@@ -77,20 +77,6 @@ class TestFetchWeather:
 
     @time_machine.travel("2026-02-17T10:30:00Z")
     @respx.mock
-    async def test_fetch_weather_caches_result(self) -> None:
-        """Given a successful fetch, when called again, then the cached result is returned."""
-        route = respx.get(OPEN_METEO_URL).mock(
-            return_value=httpx.Response(200, json=MOCK_OPEN_METEO_RESPONSE)
-        )
-
-        first = await fetch_weather()
-        second = await fetch_weather()
-
-        assert first == second
-        assert route.call_count == 1
-
-    @time_machine.travel("2026-02-17T10:30:00Z")
-    @respx.mock
     async def test_fetch_weather_raises_on_http_error(self) -> None:
         """Given an HTTP error, when fetched, then the error propagates."""
         respx.get(OPEN_METEO_URL).mock(return_value=httpx.Response(500))

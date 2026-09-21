@@ -1,11 +1,6 @@
-{% set weather = weather if weather is defined else data.weather %}
-{% set weather_error = weather_error if weather_error is defined else data.weather_error %}
-
-{% if weather_error %}
-    <p class="error-text">Hourly forecast unavailable</p>
-{% elif weather %}
+{% if weather.data %}
     <div class="weather-hours">
-        {% for hour in weather.hourly[:8] %}
+        {% for hour in weather.data.hourly[:8] %}
             <div class="weather-hour">
                 <span class="hour-time">{{ '%02d' | format(hour.hour) }}:00</span>
                 <span class="hour-emoji">{{ hour.emoji }}</span>
@@ -13,6 +8,11 @@
             </div>
         {% endfor %}
     </div>
+    {% if weather.is_stale %}
+        <p class="last-updated stale">As of {{ weather.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+    {% endif %}
+{% elif weather.error %}
+    <p class="error-text">Hourly forecast unavailable</p>
 {% else %}
     <p class="no-data">Loading...</p>
 {% endif %}

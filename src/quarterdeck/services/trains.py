@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, time
 
 import httpx
-from cachetools import TTLCache
 from loguru import logger
 
 from quarterdeck.config import settings
@@ -13,8 +12,6 @@ from quarterdeck.models import (
 )
 
 RTT_BASE_URL = "https://api.rtt.io/api/v1"
-
-_cache: TTLCache[str, TrainBoard] = TTLCache(maxsize=1, ttl=30)  # 30 sec
 
 
 def _parse_time(time_str: str) -> time:
@@ -85,10 +82,6 @@ def _get_auth() -> tuple[str, str]:
 
 async def fetch_train_board() -> TrainBoard:
     """Fetch train departures from RTT for the configured station and destinations."""
-    cached = _cache.get("trains")
-    if cached is not None:
-        return cached
-
     station_crs = settings.train_station_crs
     destinations = settings.destination_list
     auth = _get_auth()
@@ -145,12 +138,9 @@ async def fetch_train_board() -> TrainBoard:
                 )
             )
 
-    board = TrainBoard(
+    return TrainBoard(
         station_name=station_name,
         destination_groups=destination_groups,
         all_departures=sorted(all_departures, key=lambda d: d.minutes_away),
         fetched_at=now,
     )
-
-    _cache["trains"] = board
-    return board

@@ -222,37 +222,3 @@ class TestFetchTrainBoard:
         assert len(board.destination_groups) == 2
         assert board.destination_groups[0].destination_name == "London Bridge"
         assert board.destination_groups[1].destination_name == "Highbury & Islington"
-
-    @time_machine.travel("2026-02-17T09:42:00Z")
-    @respx.mock
-    async def test_caches_result(self, monkeypatch: object) -> None:
-        """Given a successful fetch, when called again, then the cached result is returned."""
-        import quarterdeck.services.trains as trains_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            trains_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "train_station_crs": "FOH",
-                    "destination_list": ["LBG"],
-                    "rtt_username": "test",
-                    "rtt_password": "test",
-                },
-            )(),
-        )
-
-        all_route = respx.get(f"{RTT_BASE_URL}/json/search/FOH/2026/02/17").mock(
-            return_value=httpx.Response(200, json=MOCK_RTT_ALL_DEPARTURES)
-        )
-        respx.get(f"{RTT_BASE_URL}/json/search/FOH/to/LBG/2026/02/17").mock(
-            return_value=httpx.Response(200, json=MOCK_RTT_LBG_DEPARTURES)
-        )
-
-        first = await fetch_train_board()
-        second = await fetch_train_board()
-
-        assert first == second
-        assert all_route.call_count == 1

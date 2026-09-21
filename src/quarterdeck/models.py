@@ -62,13 +62,3 @@ class TodayAgenda(BaseModel):
     fetched_at: datetime
     feed_count: int = 0
     failed_feed_count: int = 0
-
-
-class DashboardData(BaseModel):
-    weather: WeatherForecast | None = None
-    weather_error: str | None = None
-    trains: TrainBoard | None = None
-    trains_error: str | None = None
-    agenda: TodayAgenda | None = None
-    agenda_error: str | None = None
-    now: datetime
