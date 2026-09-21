@@ -241,14 +241,14 @@ class TestDegradedStates:
         self, sources: Sources, client: TestClient
     ) -> None:
         """Given an auth failure with no prior data, when GET /partials/trains,
-        then the panel tells the viewer to check RTT credentials.
+        then the panel tells the viewer to check the RTT API token.
         """
         sources.trains.snapshot = Snapshot(error="401 Unauthorised", error_kind=ErrorKind.AUTH)
 
         response = client.get("/partials/trains")
 
         assert response.status_code == 200
-        assert "check RTT credentials" in response.text
+        assert "check RTT API token" in response.text
 
     def test_trains_transient_error_has_no_credentials_hint(
         self, sources: Sources, client: TestClient

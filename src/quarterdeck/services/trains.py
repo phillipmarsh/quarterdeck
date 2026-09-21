@@ -1,4 +1,14 @@
-from datetime import UTC, datetime, time
+"""Train departures from the Realtime Trains next-generation API.
+
+Uses the /gb-nr/location line-up endpoint on data.rtt.io with Bearer
+token auth (the legacy basic-auth api.rtt.io is switched off from
+September 2026). Only long-life access tokens are supported; the
+refresh-token exchange flow is deliberately not implemented.
+"""
+
+import asyncio
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from loguru import logger
@@ -11,136 +21,165 @@ from quarterdeck.models import (
     TrainStatus,
 )
 
-RTT_BASE_URL = "https://api.rtt.io/api/v1"
+RTT_BASE_URL = "https://data.rtt.io"
+
+# Departure boards show local wall-clock times
+LONDON_TZ = ZoneInfo("Europe/London")
+
+# Look-ahead for the line-up query; the API default of 60 minutes can
+# leave sparse routes with too few departures to fill a panel
+TIME_WINDOW_MINUTES = 120
+
+# displayAs values meaning the train no longer calls at this location
+CANCELLED_DISPLAY_VALUES = frozenset({"CANCELLED", "DIVERTED"})
 
 
-def _parse_time(time_str: str) -> time:
-    """Parse RTT time string (HHMM) into a time object."""
-    return time(hour=int(time_str[:2]), minute=int(time_str[2:4]))
+def _parse_datetime(value: str | None) -> datetime | None:
+    """Parse a StandardisedDateTime; a naive value means the location's
+    local timezone per the API specification."""
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=LONDON_TZ)
+    return parsed
 
 
-def _calculate_minutes_away(departure_time: time, now: datetime) -> int:
-    """Calculate minutes until the train departs."""
-    now_minutes = now.hour * 60 + now.minute
-    dep_minutes = departure_time.hour * 60 + departure_time.minute
-    return dep_minutes - now_minutes
+def _resolve_platform(service: dict) -> str | None:
+    platform_data = service.get("locationMetadata", {}).get("platform") or {}
+    return platform_data.get("actual") or platform_data.get("planned")
+
+
+def _resolve_destination_name(service: dict) -> str:
+    destinations = service.get("destination", [])
+    if not destinations:
+        return "Unknown"
+    return destinations[0].get("location", {}).get("description", "Unknown")
 
 
 def _parse_departure(service: dict, now: datetime) -> TrainDeparture | None:
-    """Parse a single RTT service object into a TrainDeparture."""
-    location_detail = service.get("locationDetail", {})
+    """Convert a location line-up object into a TrainDeparture.
 
-    # Skip non-stopping services
-    display_as = location_detail.get("displayAs", "CALL")
+    Returns None for services that do not belong on a departure board:
+    passes, services without an advertised departure, and services not
+    in passenger use.
+    """
+    temporal = service.get("temporalData", {})
+    display_as = temporal.get("displayAs") or "PASS"
     if display_as == "PASS":
         return None
 
-    # Determine status
-    status = TrainStatus.CANCELLED if display_as == "CANCELLED_CALL" else TrainStatus.ON_TIME
-
-    # Get scheduled departure time
-    scheduled_str = location_detail.get("gbttBookedDeparture")
-    if scheduled_str is None:
+    if service.get("scheduleMetadata", {}).get("inPassengerService") is False:
         return None
-    scheduled = _parse_time(scheduled_str)
 
-    # Get realtime departure if available
-    realtime_str = location_detail.get("realtimeDeparture")
-    expected: time | None = None
-    if realtime_str is not None:
-        expected = _parse_time(realtime_str)
-        # Check if late (realtime is after scheduled)
-        if status != TrainStatus.CANCELLED and expected > scheduled:
-            status = TrainStatus.LATE
+    departure_data = temporal.get("departure") or {}
+    scheduled_dt = _parse_datetime(departure_data.get("scheduleAdvertised"))
+    if scheduled_dt is None:
+        return None
 
-    effective_time = expected if expected is not None else scheduled
-    minutes_away = _calculate_minutes_away(effective_time, now)
+    expected_dt = _parse_datetime(
+        departure_data.get("realtimeForecast") or departure_data.get("realtimeActual")
+    )
 
-    # Get destination name
-    destination_parts = service.get("filter", {}).get("destination", [])
-    if destination_parts:
-        destination = destination_parts[0].get("description", "Unknown")
-    else:
-        destination = location_detail.get("destination", [{}])[0].get("description", "Unknown")
+    is_cancelled = display_as in CANCELLED_DISPLAY_VALUES or departure_data.get(
+        "isCancelled", False
+    )
+    status = TrainStatus.CANCELLED if is_cancelled else TrainStatus.ON_TIME
+    if (
+        status is not TrainStatus.CANCELLED
+        and expected_dt is not None
+        and expected_dt > scheduled_dt
+    ):
+        status = TrainStatus.LATE
 
-    platform = location_detail.get("platform")
+    effective_dt = expected_dt if expected_dt is not None else scheduled_dt
+    minutes_away = int((effective_dt - now).total_seconds() // 60)
 
     return TrainDeparture(
-        scheduled=scheduled,
-        expected=expected,
+        scheduled=scheduled_dt.astimezone(LONDON_TZ).time(),
+        expected=expected_dt.astimezone(LONDON_TZ).time() if expected_dt is not None else None,
         minutes_away=minutes_away,
-        destination=destination,
+        destination=_resolve_destination_name(service),
         status=status,
-        platform=platform,
-        service_uid=service.get("serviceUid", ""),
+        platform=_resolve_platform(service),
+        service_uid=service.get("scheduleMetadata", {}).get("uniqueIdentity", ""),
     )
 
 
-def _get_auth() -> tuple[str, str]:
-    return (settings.rtt_username, settings.rtt_password)
+def _parse_services(line_up: dict, now: datetime) -> list[TrainDeparture]:
+    departures: list[TrainDeparture] = []
+    for service in line_up.get("services", []) or []:
+        departure = _parse_departure(service, now)
+        if departure is not None and departure.minutes_away >= 0:
+            departures.append(departure)
+    return sorted(departures, key=lambda d: d.minutes_away)
+
+
+def _resolve_group_name(line_up: dict, destination_crs: str) -> str:
+    """Find the display name for a filtered destination.
+
+    The next-generation API does not echo the filterTo location back, so
+    the name is taken from any service terminating at the filtered CRS.
+    Falls back to the CRS when every returned train merely calls there.
+    """
+    for service in line_up.get("services", []) or []:
+        for destination in service.get("destination", []):
+            location = destination.get("location", {})
+            if destination_crs in location.get("shortCodes", []):
+                return location.get("description", destination_crs)
+    return destination_crs
+
+
+async def _fetch_line_up(
+    client: httpx.AsyncClient, code: str, filter_to: str | None = None
+) -> dict:
+    params: dict[str, str | int] = {"code": code, "timeWindow": TIME_WINDOW_MINUTES}
+    if filter_to is not None:
+        params["filterTo"] = filter_to
+    response = await client.get(f"{RTT_BASE_URL}/gb-nr/location", params=params)
+    response.raise_for_status()
+    if response.status_code == 204:
+        return {}
+    return response.json()
 
 
 async def fetch_train_board() -> TrainBoard:
-    """Fetch train departures from RTT for the configured station and destinations."""
+    """Fetch train departures for the configured station and destinations.
+
+    The unfiltered line-up and each per-destination line-up are fetched
+    concurrently against the shared rate limit.
+    """
     station_crs = settings.train_station_crs
     destinations = settings.destination_list
-    auth = _get_auth()
     now = datetime.now(tz=UTC)
-    today_str = now.strftime("%Y/%m/%d")
 
     logger.info("Fetching train departures for {}", station_crs)
 
-    async with httpx.AsyncClient(timeout=10.0, auth=auth) as client:
-        # Fetch all departures
-        all_response = await client.get(
-            f"{RTT_BASE_URL}/json/search/{station_crs}/{today_str}",
+    # An empty token would make an illegal "Bearer " header; sending no
+    # header lets the API's own 401 drive the check-your-token panel hint
+    headers = (
+        {"Authorization": f"Bearer {settings.rtt_api_token}"} if settings.rtt_api_token else {}
+    )
+    async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+        all_data, *destination_data = await asyncio.gather(
+            _fetch_line_up(client, station_crs),
+            *(_fetch_line_up(client, station_crs, dest_crs) for dest_crs in destinations),
         )
-        all_response.raise_for_status()
-        all_data = all_response.json()
 
-        station_name = all_data.get("location", {}).get("name", station_crs)
+    station_name = all_data.get("query", {}).get("location", {}).get("description", station_crs)
 
-        # Parse all departures
-        all_departures: list[TrainDeparture] = []
-        for service in all_data.get("services", []) or []:
-            departure = _parse_departure(service, now)
-            if departure is not None and departure.minutes_away >= 0:
-                all_departures.append(departure)
-
-        # Fetch per-destination
-        destination_groups: list[TrainDestinationGroup] = []
-        for dest_crs in destinations:
-            dest_response = await client.get(
-                f"{RTT_BASE_URL}/json/search/{station_crs}/to/{dest_crs}/{today_str}",
-            )
-            dest_response.raise_for_status()
-            dest_data = dest_response.json()
-
-            dest_name = dest_crs
-            dest_departures: list[TrainDeparture] = []
-            for service in dest_data.get("services", []) or []:
-                departure = _parse_departure(service, now)
-                if departure is not None and departure.minutes_away >= 0:
-                    dest_departures.append(departure)
-                    if dest_name == dest_crs and departure.destination:
-                        dest_name = departure.destination
-
-            # Use filter destination name from response if available
-            filter_dest = dest_data.get("filter", {}).get("destination", {})
-            if filter_dest.get("name"):
-                dest_name = filter_dest["name"]
-
-            destination_groups.append(
-                TrainDestinationGroup(
-                    destination_name=dest_name,
-                    destination_crs=dest_crs,
-                    departures=sorted(dest_departures, key=lambda d: d.minutes_away),
-                )
-            )
+    destination_groups = [
+        TrainDestinationGroup(
+            destination_name=_resolve_group_name(line_up, dest_crs),
+            destination_crs=dest_crs,
+            departures=_parse_services(line_up, now),
+        )
+        for dest_crs, line_up in zip(destinations, destination_data, strict=True)
+    ]
 
     return TrainBoard(
         station_name=station_name,
         destination_groups=destination_groups,
-        all_departures=sorted(all_departures, key=lambda d: d.minutes_away),
+        all_departures=_parse_services(all_data, now),
         fetched_at=now,
     )

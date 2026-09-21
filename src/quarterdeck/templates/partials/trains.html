@@ -73,7 +73,7 @@
     {% endif %}
 {% elif trains.error %}
     <p class="error-text">
-        Train data unavailable{% if trains.error_kind == 'auth' %} — check RTT credentials{% endif %}
+        Train data unavailable{% if trains.error_kind == 'auth' %} — check RTT API token{% endif %}
     </p>
 {% else %}
     <p class="no-data">Loading...</p>

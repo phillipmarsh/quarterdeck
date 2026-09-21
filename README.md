@@ -17,7 +17,10 @@ cp .env.example .env
 
 Edit `.env` with your real values — at minimum:
 
-- **RTT_USERNAME / RTT_PASSWORD** — register free at [api.rtt.io](https://api.rtt.io)
+- **RTT_API_TOKEN** — sign in at [api-portal.rtt.io](https://api-portal.rtt.io) with an
+  RTT unified login (accounts.realtimetrains.com) and request an access token
+  (free for personal, non-commercial use). Only long-life access tokens are
+  supported, not refresh tokens.
 - **ICAL_FEED_URLS** — grab from Google Calendar Settings → "Secret address in iCal format"
   and/or iCloud Calendar sharing
 - The weather/train station defaults (Forest Hill → London Bridge / Highbury & Islington)
@@ -38,8 +41,7 @@ All configuration is via environment variables (see `.env.example`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RTT_USERNAME` | Realtime Trains API username | |
-| `RTT_PASSWORD` | Realtime Trains API password | |
+| `RTT_API_TOKEN` | Realtime Trains API access token | |
 | `TRAIN_STATION_CRS` | Departure station CRS code | `FOH` |
 | `TRAIN_DESTINATIONS` | Comma-separated destination CRS codes | `LBG,HHY` |
 | `WEATHER_LATITUDE` | Weather location latitude | `51.4525` |

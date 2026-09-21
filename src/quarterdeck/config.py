@@ -2,11 +2,12 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # extra="ignore" so leftover keys from earlier versions in .env do not
+    # stop the app from starting
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
-    # Realtime Trains API
-    rtt_username: str = ""
-    rtt_password: str = ""
+    # Realtime Trains next-generation API (Bearer access token)
+    rtt_api_token: str = ""
 
     # Train station CRS code (e.g., FOH for Forest Hill)
     train_station_crs: str = "FOH"
