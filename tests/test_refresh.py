@@ -1,7 +1,12 @@
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+from loguru import logger
+
+if TYPE_CHECKING:
+    from loguru import Record
 
 from quarterdeck.refresh import ErrorKind, Refresher, Snapshot, build_sources, classify_error
 
@@ -95,6 +100,30 @@ class TestRefresher:
         assert refresher.snapshot.data is None
         assert refresher.snapshot.error_kind is ErrorKind.AUTH
         assert not refresher.snapshot.is_stale
+
+    async def test_repeated_failure_logs_traceback_only_once(self) -> None:
+        """Given the same failure on consecutive refreshes, when refreshed,
+        then the full traceback is logged once and repeats log a single warning line.
+        """
+
+        async def fetch() -> str:
+            raise httpx.ConnectError("network down")
+
+        refresher = Refresher("test", fetch, interval_seconds=60)
+        records: list[Record] = []
+        sink_id = logger.add(lambda message: records.append(message.record), level="DEBUG")
+
+        try:
+            await refresher.refresh_once()
+            await refresher.refresh_once()
+        finally:
+            logger.remove(sink_id)
+
+        refresh_records = [r for r in records if "Refresh of test" in r["message"]]
+        assert len(refresh_records) == 2
+        assert refresh_records[0]["exception"] is not None
+        assert refresh_records[1]["exception"] is None
+        assert refresh_records[1]["level"].name == "WARNING"
 
     async def test_recovery_clears_error(self) -> None:
         """Given a fetcher that recovers after a failure, when refreshed,

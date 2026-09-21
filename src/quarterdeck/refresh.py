@@ -88,20 +88,33 @@ class Refresher[T]:
         self.snapshot: Snapshot[T] = Snapshot()
 
     async def refresh_once(self) -> None:
-        """Fetch once, keeping the previous data if the fetch fails."""
+        """Fetch once, keeping the previous data if the fetch fails.
+
+        A persistently failing source retries every cycle, so only a new
+        or changed failure logs the full traceback; repeats log one line
+        to keep an unattended appliance's journal readable.
+        """
         try:
             data = await self._fetch()
         except Exception as exc:
             kind = classify_error(exc)
-            logger.exception("Refresh of {} failed ({})", self.name, kind)
+            error_message = str(exc)
+            if error_message == self.snapshot.error:
+                logger.warning(
+                    "Refresh of {} still failing ({}): {}", self.name, kind, error_message
+                )
+            else:
+                logger.exception("Refresh of {} failed ({})", self.name, kind)
             self.snapshot = Snapshot(
                 data=self.snapshot.data,
                 fetched_at=self.snapshot.fetched_at,
-                error=str(exc),
+                error=error_message,
                 error_kind=kind,
             )
             return
 
+        if self.snapshot.error is not None:
+            logger.info("Refresh of {} recovered", self.name)
         self.snapshot = Snapshot(data=data, fetched_at=datetime.now(tz=UTC))
 
     def _next_interval(self) -> float:
