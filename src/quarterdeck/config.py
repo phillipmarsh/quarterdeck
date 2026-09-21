@@ -28,7 +28,16 @@ class Settings(BaseSettings):
 
     @property
     def feed_url_list(self) -> list[str]:
-        return [u.strip() for u in self.ical_feed_urls.split(",") if u.strip()]
+        """Configured iCal feed URLs.
+
+        webcal:// is an alias for HTTPS used by calendar apps (Apple's
+        share sheet produces it); httpx cannot fetch it, so normalise.
+        """
+        urls = [u.strip() for u in self.ical_feed_urls.split(",") if u.strip()]
+        return [
+            "https://" + url.removeprefix("webcal://") if url.startswith("webcal://") else url
+            for url in urls
+        ]
 
 
 settings = Settings()
