@@ -85,15 +85,9 @@ MOCK_RTT_HHY_DEPARTURES = {
                 "realtimeDeparture": "0955",
                 "displayAs": "CALL",
                 "platform": "2",
-                "destination": [
-                    {"description": "Highbury & Islington", "crs": "HHY"}
-                ],
+                "destination": [{"description": "Highbury & Islington", "crs": "HHY"}],
             },
-            "filter": {
-                "destination": [
-                    {"description": "Highbury & Islington", "crs": "HHY"}
-                ]
-            },
+            "filter": {"destination": [{"description": "Highbury & Islington", "crs": "HHY"}]},
         },
     ],
 }
@@ -195,13 +189,18 @@ class TestFetchTrainBoard:
         import quarterdeck.services.trains as trains_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
-            trains_mod, "settings",
-            type("S", (), {
-                "train_station_crs": "FOH",
-                "destination_list": ["LBG", "HHY"],
-                "rtt_username": "test",
-                "rtt_password": "test",
-            })(),
+            trains_mod,
+            "settings",
+            type(
+                "S",
+                (),
+                {
+                    "train_station_crs": "FOH",
+                    "destination_list": ["LBG", "HHY"],
+                    "rtt_username": "test",
+                    "rtt_password": "test",
+                },
+            )(),
         )
 
         respx.get(f"{RTT_BASE_URL}/json/search/FOH/2026/02/17").mock(
@@ -231,13 +230,18 @@ class TestFetchTrainBoard:
         import quarterdeck.services.trains as trains_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
-            trains_mod, "settings",
-            type("S", (), {
-                "train_station_crs": "FOH",
-                "destination_list": ["LBG"],
-                "rtt_username": "test",
-                "rtt_password": "test",
-            })(),
+            trains_mod,
+            "settings",
+            type(
+                "S",
+                (),
+                {
+                    "train_station_crs": "FOH",
+                    "destination_list": ["LBG"],
+                    "rtt_username": "test",
+                    "rtt_password": "test",
+                },
+            )(),
         )
 
         all_route = respx.get(f"{RTT_BASE_URL}/json/search/FOH/2026/02/17").mock(

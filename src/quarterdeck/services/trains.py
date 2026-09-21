@@ -39,9 +39,7 @@ def _parse_departure(service: dict, now: datetime) -> TrainDeparture | None:
         return None
 
     # Determine status
-    status = (
-        TrainStatus.CANCELLED if display_as == "CANCELLED_CALL" else TrainStatus.ON_TIME
-    )
+    status = TrainStatus.CANCELLED if display_as == "CANCELLED_CALL" else TrainStatus.ON_TIME
 
     # Get scheduled departure time
     scheduled_str = location_detail.get("gbttBookedDeparture")
