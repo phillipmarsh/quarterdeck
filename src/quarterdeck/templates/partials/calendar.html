@@ -17,7 +17,7 @@
                     {% if event.is_all_day %}
                         <span class="event-time all-day-badge">All day</span>
                     {% else %}
-                        <span class="event-time">{{ event.start.strftime('%H:%M') }}</span>
+                        <span class="event-time">{{ (event.start | localtime).strftime('%H:%M') }}</span>
                     {% endif %}
                     <span class="event-summary">{{ event.summary }}</span>
                     {% if event.location %}
@@ -30,9 +30,9 @@
         </div>
 
         {% if agenda.is_stale %}
-            <p class="last-updated stale">As of {{ agenda.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+            <p class="last-updated stale">As of {{ (agenda.fetched_at | localtime).strftime('%H:%M') }} — refresh failing</p>
         {% else %}
-            <p class="last-updated">Updated {{ agenda.fetched_at.strftime('%H:%M:%S') }}</p>
+            <p class="last-updated">Updated {{ (agenda.fetched_at | localtime).strftime('%H:%M:%S') }}</p>
         {% endif %}
     {% endif %}
 {% elif agenda.error %}

@@ -1,6 +1,6 @@
 <div class="header-content">
     <span class="header-date">
-        {{ now.strftime('%a %d %b') }}
+        {{ (now | localtime).strftime('%a %d %b') }}
     </span>
 
     <span class="header-weather">

@@ -8,12 +8,11 @@ lives in rtt_auth.
 
 import asyncio
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 import httpx
 from loguru import logger
 
-from quarterdeck.config import settings
+from quarterdeck.config import LONDON_TZ, settings
 from quarterdeck.models import (
     TrainBoard,
     TrainDeparture,
@@ -21,9 +20,6 @@ from quarterdeck.models import (
     TrainStatus,
 )
 from quarterdeck.services.rtt_auth import RTT_BASE_URL, resolve_access_token
-
-# Departure boards show local wall-clock times
-LONDON_TZ = ZoneInfo("Europe/London")
 
 # Look-ahead for the line-up query; the API default of 60 minutes can
 # leave sparse routes with too few departures to fill a panel

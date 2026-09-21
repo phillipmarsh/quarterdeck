@@ -117,6 +117,24 @@ class TestParseIcalEvents:
         assert len(events) == 1
         assert events[0].summary == "Holiday"
 
+    def test_utc_event_near_midnight_lands_on_local_day(self) -> None:
+        """Given a timed event at 23:30 UTC during BST (00:30 next day in London),
+        when parsed for the London day, then it is included.
+        """
+        ical = """\
+BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Late night
+DTSTART:20260630T233000Z
+DTEND:20260701T003000Z
+END:VEVENT
+END:VCALENDAR
+"""
+        events = _parse_ical_events(ical, date(2026, 7, 1))
+
+        assert len(events) == 1
+        assert events[0].summary == "Late night"
+
     def test_multi_day_all_day_event_excluded_after_range(self) -> None:
         """Given a multi-day all-day event, when parsed after the end date, then it is excluded."""
         events = _parse_ical_events(ICAL_MULTI_DAY_ALL_DAY, date(2026, 2, 19))

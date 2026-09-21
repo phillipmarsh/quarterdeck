@@ -9,7 +9,7 @@
         {% endfor %}
     </div>
     {% if weather.is_stale %}
-        <p class="last-updated stale">As of {{ weather.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+        <p class="last-updated stale">As of {{ (weather.fetched_at | localtime).strftime('%H:%M') }} — refresh failing</p>
     {% endif %}
 {% elif weather.error %}
     <p class="error-text">Hourly forecast unavailable</p>

@@ -5,7 +5,7 @@ import httpx
 import icalendar
 from loguru import logger
 
-from quarterdeck.config import settings
+from quarterdeck.config import LONDON_TZ, settings
 from quarterdeck.models import CalendarEvent, TodayAgenda
 
 
@@ -40,8 +40,14 @@ def _parse_ical_events(cal_data: str, today: date) -> list[CalendarEvent]:
         location = str(location_prop) if location_prop is not None else None
 
         if isinstance(start_value, datetime):
-            # Timed event — check if it falls on today
-            if start_value.date() != today:
+            # Timed event — the day boundary is UK wall-clock, so a UTC
+            # start near midnight lands on the correct local day
+            event_date = (
+                start_value.astimezone(LONDON_TZ).date()
+                if start_value.tzinfo is not None
+                else start_value.date()
+            )
+            if event_date != today:
                 continue
             events.append(
                 CalendarEvent(
@@ -103,7 +109,8 @@ async def fetch_agenda() -> TodayAgenda:
         logger.warning("No iCal feed URLs configured")
         return TodayAgenda(events=[], fetched_at=datetime.now(tz=UTC))
 
-    today = date.today()
+    # "Today" is the UK wall-clock day, regardless of the host's timezone
+    today = datetime.now(tz=LONDON_TZ).date()
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         results = await asyncio.gather(

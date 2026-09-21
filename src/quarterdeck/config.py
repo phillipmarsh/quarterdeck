@@ -1,4 +1,10 @@
+from zoneinfo import ZoneInfo
+
 from pydantic_settings import BaseSettings
+
+# All display formatting and day-boundary logic uses UK wall-clock time;
+# data is stored and compared in UTC
+LONDON_TZ = ZoneInfo("Europe/London")
 
 
 class Settings(BaseSettings):

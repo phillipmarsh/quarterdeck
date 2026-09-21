@@ -67,9 +67,9 @@
     {% endif %}
 
     {% if trains.is_stale %}
-        <p class="last-updated stale">As of {{ trains.fetched_at.strftime('%H:%M') }} — refresh failing</p>
+        <p class="last-updated stale">As of {{ (trains.fetched_at | localtime).strftime('%H:%M') }} — refresh failing</p>
     {% else %}
-        <p class="last-updated">Updated {{ trains.fetched_at.strftime('%H:%M:%S') }}</p>
+        <p class="last-updated">Updated {{ (trains.fetched_at | localtime).strftime('%H:%M:%S') }}</p>
     {% endif %}
 {% elif trains.error %}
     <p class="error-text">
