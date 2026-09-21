@@ -5,14 +5,27 @@ import respx
 import time_machine
 
 from quarterdeck.models import TrainStatus
+from quarterdeck.services.rtt_auth import RTT_BASE_URL
 from quarterdeck.services.trains import (
-    RTT_BASE_URL,
     _parse_datetime,
     _parse_departure,
     _parse_services,
-    _resolve_group_name,
     fetch_train_board,
 )
+
+MOCK_EXCHANGE_RESPONSE = {
+    "token": "short-life-access-token",
+    "entitlements": [],
+    "validUntil": "2026-02-17T10:12:00+00:00",
+}
+
+MOCK_STOPS_RESPONSE = {
+    "stops": [
+        {"shortCode": "FOH", "description": "Forest Hill"},
+        {"shortCode": "LBG", "description": "London Bridge"},
+        {"shortCode": "HHY", "description": "Highbury & Islington"},
+    ]
+}
 
 
 def _service(
@@ -243,22 +256,6 @@ class TestParseServices:
         assert all(d.minutes_away >= 0 for d in departures)
 
 
-class TestResolveGroupName:
-    """Test destination group naming."""
-
-    def test_resolves_name_from_terminating_service(self) -> None:
-        """Given a line-up with a service terminating at the filter CRS,
-        when resolved, then the location description is used.
-        """
-        assert _resolve_group_name(MOCK_LBG_LINE_UP, "LBG") == "London Bridge"
-
-    def test_falls_back_to_crs(self) -> None:
-        """Given a line-up where no service terminates at the filter CRS,
-        when resolved, then the CRS itself is used.
-        """
-        assert _resolve_group_name(MOCK_LBG_LINE_UP, "XXX") == "XXX"
-
-
 class TestFetchTrainBoard:
     """Test the full train board fetching flow."""
 
@@ -266,8 +263,10 @@ class TestFetchTrainBoard:
     @respx.mock
     async def test_fetches_all_and_filtered_departures(self, monkeypatch: object) -> None:
         """Given next-generation API responses, when fetched,
-        then both all and per-destination departures are returned.
+        then both all and per-destination departures are returned
+        using an exchanged access token.
         """
+        import quarterdeck.services.rtt_auth as rtt_auth_mod
         import quarterdeck.services.trains as trains_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
@@ -279,11 +278,21 @@ class TestFetchTrainBoard:
                 {
                     "train_station_crs": "FOH",
                     "destination_list": ["LBG", "HHY"],
-                    "rtt_api_token": "test-token",
                 },
             )(),
         )
+        monkeypatch.setattr(  # type: ignore[attr-defined]
+            rtt_auth_mod,
+            "settings",
+            type("S", (), {"rtt_api_token": "refresh-token"})(),
+        )
 
+        respx.get(f"{RTT_BASE_URL}/api/get_access_token").mock(
+            return_value=httpx.Response(200, json=MOCK_EXCHANGE_RESPONSE)
+        )
+        respx.get(f"{RTT_BASE_URL}/data/stops").mock(
+            return_value=httpx.Response(200, json=MOCK_STOPS_RESPONSE)
+        )
         # Filtered routes are registered first: respx matches in
         # registration order and the unfiltered params are a subset
         respx.get(f"{RTT_BASE_URL}/gb-nr/location", params={"code": "FOH", "filterTo": "LBG"}).mock(
@@ -303,7 +312,9 @@ class TestFetchTrainBoard:
         assert len(board.destination_groups) == 2
         assert board.destination_groups[0].destination_name == "London Bridge"
         assert board.destination_groups[1].destination_name == "Highbury & Islington"
-        assert all_route.calls[0].request.headers["Authorization"] == "Bearer test-token"
+        assert (
+            all_route.calls[0].request.headers["Authorization"] == "Bearer short-life-access-token"
+        )
 
     @time_machine.travel("2026-02-17T09:42:00Z")
     @respx.mock
@@ -311,6 +322,7 @@ class TestFetchTrainBoard:
         """Given a 204 no-services response, when fetched,
         then an empty board with the CRS as station name is returned.
         """
+        import quarterdeck.services.rtt_auth as rtt_auth_mod
         import quarterdeck.services.trains as trains_mod
 
         monkeypatch.setattr(  # type: ignore[attr-defined]
@@ -322,11 +334,21 @@ class TestFetchTrainBoard:
                 {
                     "train_station_crs": "FOH",
                     "destination_list": [],
-                    "rtt_api_token": "test-token",
                 },
             )(),
         )
+        monkeypatch.setattr(  # type: ignore[attr-defined]
+            rtt_auth_mod,
+            "settings",
+            type("S", (), {"rtt_api_token": "refresh-token"})(),
+        )
 
+        respx.get(f"{RTT_BASE_URL}/api/get_access_token").mock(
+            return_value=httpx.Response(200, json=MOCK_EXCHANGE_RESPONSE)
+        )
+        respx.get(f"{RTT_BASE_URL}/data/stops").mock(
+            return_value=httpx.Response(200, json=MOCK_STOPS_RESPONSE)
+        )
         respx.get(f"{RTT_BASE_URL}/gb-nr/location", params={"code": "FOH"}).mock(
             return_value=httpx.Response(204)
         )

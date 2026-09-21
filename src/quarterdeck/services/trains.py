@@ -2,8 +2,8 @@
 
 Uses the /gb-nr/location line-up endpoint on data.rtt.io with Bearer
 token auth (the legacy basic-auth api.rtt.io is switched off from
-September 2026). Only long-life access tokens are supported; the
-refresh-token exchange flow is deliberately not implemented.
+September 2026). Token handling, including the refresh-token exchange,
+lives in rtt_auth.
 """
 
 import asyncio
@@ -20,8 +20,7 @@ from quarterdeck.models import (
     TrainDestinationGroup,
     TrainStatus,
 )
-
-RTT_BASE_URL = "https://data.rtt.io"
+from quarterdeck.services.rtt_auth import RTT_BASE_URL, resolve_access_token
 
 # Departure boards show local wall-clock times
 LONDON_TZ = ZoneInfo("Europe/London")
@@ -115,19 +114,22 @@ def _parse_services(line_up: dict, now: datetime) -> list[TrainDeparture]:
     return sorted(departures, key=lambda d: d.minutes_away)
 
 
-def _resolve_group_name(line_up: dict, destination_crs: str) -> str:
-    """Find the display name for a filtered destination.
+# CRS -> station name, resolved once per process from /data/stops (the
+# line-up responses carry no CRS codes to resolve names from directly)
+_station_names: dict[str, str] = {}
 
-    The next-generation API does not echo the filterTo location back, so
-    the name is taken from any service terminating at the filtered CRS.
-    Falls back to the CRS when every returned train merely calls there.
-    """
-    for service in line_up.get("services", []) or []:
-        for destination in service.get("destination", []):
-            location = destination.get("location", {})
-            if destination_crs in location.get("shortCodes", []):
-                return location.get("description", destination_crs)
-    return destination_crs
+
+async def _resolve_station_names(client: httpx.AsyncClient) -> dict[str, str]:
+    if _station_names:
+        return _station_names
+
+    response = await client.get(f"{RTT_BASE_URL}/data/stops")
+    response.raise_for_status()
+    for stop in response.json().get("stops", []):
+        code = stop.get("shortCode")
+        if code and code not in _station_names:
+            _station_names[code] = stop.get("description", code)
+    return _station_names
 
 
 async def _fetch_line_up(
@@ -155,12 +157,13 @@ async def fetch_train_board() -> TrainBoard:
 
     logger.info("Fetching train departures for {}", station_crs)
 
-    # An empty token would make an illegal "Bearer " header; sending no
-    # header lets the API's own 401 drive the check-your-token panel hint
-    headers = (
-        {"Authorization": f"Bearer {settings.rtt_api_token}"} if settings.rtt_api_token else {}
-    )
-    async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        access_token = await resolve_access_token(client)
+        # An empty token would make an illegal "Bearer " header; sending no
+        # header lets the API's own 401 drive the check-your-token panel hint
+        if access_token:
+            client.headers["Authorization"] = f"Bearer {access_token}"
+        station_names = await _resolve_station_names(client)
         all_data, *destination_data = await asyncio.gather(
             _fetch_line_up(client, station_crs),
             *(_fetch_line_up(client, station_crs, dest_crs) for dest_crs in destinations),
@@ -170,7 +173,7 @@ async def fetch_train_board() -> TrainBoard:
 
     destination_groups = [
         TrainDestinationGroup(
-            destination_name=_resolve_group_name(line_up, dest_crs),
+            destination_name=station_names.get(dest_crs, dest_crs),
             destination_crs=dest_crs,
             departures=_parse_services(line_up, now),
         )

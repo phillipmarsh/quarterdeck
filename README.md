@@ -18,9 +18,9 @@ cp .env.example .env
 Edit `.env` with your real values — at minimum:
 
 - **RTT_API_TOKEN** — sign in at [api-portal.rtt.io](https://api-portal.rtt.io) with an
-  RTT unified login (accounts.realtimetrains.com) and request an access token
-  (free for personal, non-commercial use). Only long-life access tokens are
-  supported, not refresh tokens.
+  RTT unified login (accounts.realtimetrains.com) and copy the token shown
+  (free for personal, non-commercial use). Both token kinds work: a refresh
+  token is exchanged automatically for short-life access tokens.
 - **ICAL_FEED_URLS** — grab from Google Calendar Settings → "Secret address in iCal format"
   and/or iCloud Calendar sharing
 - The weather/train station defaults (Forest Hill → London Bridge / Highbury & Islington)
