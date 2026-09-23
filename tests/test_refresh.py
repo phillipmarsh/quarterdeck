@@ -37,6 +37,10 @@ class TestClassifyError:
         """Given a transport-level error, when classified, then it is transient."""
         assert classify_error(exc) is ErrorKind.TRANSIENT
 
+    def test_429_classified_as_rate_limited(self) -> None:
+        """Given a 429 response error, when classified, then it is rate limited."""
+        assert classify_error(_http_status_error(429)) is ErrorKind.RATE_LIMITED
+
     @pytest.mark.parametrize("exc", [_http_status_error(500), ValueError("bad payload")])
     def test_other_errors_classified_as_unknown(self, exc: Exception) -> None:
         """Given a server error or parse failure, when classified, then it is unknown."""
@@ -145,6 +149,45 @@ class TestRefresher:
         assert refresher.snapshot.data == "recovered"
         assert refresher.snapshot.error is None
         assert not refresher.snapshot.is_stale
+
+
+class TestRateLimitHandling:
+    """Test that a 429's Retry-After is respected rather than retried blind."""
+
+    async def test_429_records_retry_after(self) -> None:
+        """Given a 429 with Retry-After, when refreshed,
+        then the lockout duration is recorded on the snapshot.
+        """
+        request = httpx.Request("GET", "https://api.example.com")
+        response = httpx.Response(429, request=request, headers={"retry-after": "2350"})
+
+        async def fetch() -> str:
+            raise httpx.HTTPStatusError("limited", request=request, response=response)
+
+        refresher = Refresher("test", fetch, interval_seconds=300, retry_interval_seconds=60)
+
+        await refresher.refresh_once()
+
+        assert refresher.snapshot.error_kind is ErrorKind.RATE_LIMITED
+        assert refresher.snapshot.retry_after_seconds == 2350
+        assert refresher._next_interval() == 2355  # pyright: ignore[reportPrivateUsage]
+
+    async def test_429_without_retry_after_uses_retry_interval(self) -> None:
+        """Given a 429 with no Retry-After header, when refreshed,
+        then the normal retry cadence applies.
+        """
+        request = httpx.Request("GET", "https://api.example.com")
+        response = httpx.Response(429, request=request)
+
+        async def fetch() -> str:
+            raise httpx.HTTPStatusError("limited", request=request, response=response)
+
+        refresher = Refresher("test", fetch, interval_seconds=300, retry_interval_seconds=60)
+
+        await refresher.refresh_once()
+
+        assert refresher.snapshot.retry_after_seconds is None
+        assert refresher._next_interval() == 60  # pyright: ignore[reportPrivateUsage]
 
 
 class TestRefreshCadence:

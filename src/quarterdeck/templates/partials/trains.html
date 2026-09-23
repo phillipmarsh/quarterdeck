@@ -33,7 +33,7 @@
                     {% elif dep.status.value == "late" %}
                         <span class="dep-status late">Exp {{ dep.expected.strftime('%H:%M') }}</span>
                     {% else %}
-                        <span class="dep-status on-time">({{ dep.minutes_away }} min)</span>
+                        <span class="dep-status on-time">({{ dep.display_minutes }} min)</span>
                     {% endif %}
                     {% if dep.platform %}
                         <span class="dep-platform">P{{ dep.platform }}</span>
@@ -53,7 +53,7 @@
                         {% elif dep.status.value == "late" %}
                             <span class="dep-status late">Exp {{ dep.expected.strftime('%H:%M') }}</span>
                         {% else %}
-                            <span class="dep-status on-time">({{ dep.minutes_away }} min)</span>
+                            <span class="dep-status on-time">({{ dep.display_minutes }} min)</span>
                         {% endif %}
                         {% if dep.platform %}
                             <span class="dep-platform">P{{ dep.platform }}</span>
@@ -73,7 +73,7 @@
     {% endif %}
 {% elif trains.error %}
     <p class="error-text">
-        Train data unavailable{% if trains.error_kind == 'auth' %} — check RTT API token{% endif %}
+        Train data unavailable{% if trains.error_kind == 'auth' %} — check RTT API token{% elif trains.error_kind == 'rate_limited' %} — rate limited, waiting to retry{% endif %}
     </p>
 {% else %}
     <p class="no-data">Loading...</p>

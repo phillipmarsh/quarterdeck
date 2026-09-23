@@ -123,8 +123,6 @@ MOCK_HHY_LINE_UP = {
     "services": [LATE_SERVICE],
 }
 
-NOW = datetime(2026, 2, 17, 9, 42, tzinfo=UTC)
-
 
 class TestParseDatetime:
     """Test StandardisedDateTime parsing."""
@@ -154,9 +152,10 @@ class TestParseDatetime:
 class TestParseDeparture:
     """Test line-up object parsing."""
 
+    @time_machine.travel("2026-02-17T09:42:00Z")
     def test_parses_on_time_service(self) -> None:
         """Given an on-time service, when parsed, then status is ON_TIME."""
-        departure = _parse_departure(ON_TIME_SERVICE, NOW)
+        departure = _parse_departure(ON_TIME_SERVICE)
 
         assert departure is not None
         assert departure.scheduled == time(9, 48)
@@ -165,9 +164,10 @@ class TestParseDeparture:
         assert departure.platform == "1"
         assert departure.destination == "London Bridge"
 
+    @time_machine.travel("2026-02-17T09:42:00Z")
     def test_parses_late_service(self) -> None:
         """Given a late service, when parsed, then status is LATE with correct expected time."""
-        departure = _parse_departure(LATE_SERVICE, NOW)
+        departure = _parse_departure(LATE_SERVICE)
 
         assert departure is not None
         assert departure.status == TrainStatus.LATE
@@ -176,7 +176,7 @@ class TestParseDeparture:
 
     def test_parses_cancelled_service(self) -> None:
         """Given a cancelled service, when parsed, then status is CANCELLED."""
-        departure = _parse_departure(CANCELLED_SERVICE, NOW)
+        departure = _parse_departure(CANCELLED_SERVICE)
 
         assert departure is not None
         assert departure.status == TrainStatus.CANCELLED
@@ -193,14 +193,14 @@ class TestParseDeparture:
         )
         service["temporalData"]["departure"]["isCancelled"] = True
 
-        departure = _parse_departure(service, NOW)
+        departure = _parse_departure(service)
 
         assert departure is not None
         assert departure.status == TrainStatus.CANCELLED
 
     def test_skips_pass_service(self) -> None:
         """Given a passing (non-stopping) service, when parsed, then None is returned."""
-        assert _parse_departure(PASS_SERVICE, NOW) is None
+        assert _parse_departure(PASS_SERVICE) is None
 
     def test_skips_non_passenger_service(self) -> None:
         """Given an empty-stock working, when parsed, then None is returned."""
@@ -212,7 +212,7 @@ class TestParseDeparture:
             in_passenger_service=False,
         )
 
-        assert _parse_departure(service, NOW) is None
+        assert _parse_departure(service) is None
 
     def test_skips_service_without_advertised_departure(self) -> None:
         """Given a service with no advertised departure (e.g. a terminating train),
@@ -226,7 +226,7 @@ class TestParseDeparture:
         )
         service["temporalData"]["departure"] = {}
 
-        assert _parse_departure(service, NOW) is None
+        assert _parse_departure(service) is None
 
     def test_bst_times_render_as_london_wall_clock(self) -> None:
         """Given a UTC departure time during BST, when parsed,
@@ -238,9 +238,8 @@ class TestParseDeparture:
             "LBG",
             scheduled="2026-07-01T12:00:00Z",
         )
-        summer_now = datetime(2026, 7, 1, 11, 50, tzinfo=UTC)
 
-        departure = _parse_departure(service, summer_now)
+        departure = _parse_departure(service)
 
         assert departure is not None
         assert departure.scheduled == time(13, 0)
@@ -249,15 +248,43 @@ class TestParseDeparture:
 class TestParseServices:
     """Test line-up filtering and ordering."""
 
+    @time_machine.travel("2026-02-17T09:42:00Z")
     def test_filters_departed_and_passing_services(self) -> None:
         """Given a mixed line-up, when parsed,
         then departed trains and passes are excluded and the rest sorted by soonest.
         """
-        departures = _parse_services(MOCK_ALL_LINE_UP, NOW)
+        departures = _parse_services(MOCK_ALL_LINE_UP)
 
         assert len(departures) == 3
-        assert [d.minutes_away for d in departures] == sorted(d.minutes_away for d in departures)
+        assert [d.departs_at for d in departures] == sorted(d.departs_at for d in departures)
         assert all(d.minutes_away >= 0 for d in departures)
+
+
+class TestLiveCountdown:
+    """Test that the countdown is computed at access time, not fetch time."""
+
+    def test_minutes_away_advances_with_the_clock(self) -> None:
+        """Given a parsed departure, when the clock moves on,
+        then minutes_away reflects the new time without a refetch.
+        """
+        with time_machine.travel("2026-02-17T09:42:00Z"):
+            departure = _parse_departure(ON_TIME_SERVICE)
+        assert departure is not None
+
+        with time_machine.travel("2026-02-17T09:46:00Z"):
+            assert departure.minutes_away == 2
+
+    def test_display_minutes_floors_at_zero_after_departure(self) -> None:
+        """Given a train that has already left, when displayed,
+        then the countdown shows zero rather than a negative number.
+        """
+        with time_machine.travel("2026-02-17T09:42:00Z"):
+            departure = _parse_departure(ON_TIME_SERVICE)
+        assert departure is not None
+
+        with time_machine.travel("2026-02-17T09:50:00Z"):
+            assert departure.minutes_away < 0
+            assert departure.display_minutes == 0
 
 
 class TestFetchTrainBoard:

@@ -52,7 +52,7 @@ MOCK_TRAINS = TrainBoard(
                 TrainDeparture(
                     scheduled=time(9, 48),
                     expected=time(9, 48),
-                    minutes_away=6,
+                    departs_at=datetime(2026, 2, 17, 9, 48, tzinfo=UTC),
                     destination="London Bridge",
                     status=TrainStatus.ON_TIME,
                     platform="1",
@@ -64,7 +64,7 @@ MOCK_TRAINS = TrainBoard(
         TrainDeparture(
             scheduled=time(9, 48),
             expected=time(9, 48),
-            minutes_away=6,
+            departs_at=datetime(2026, 2, 17, 9, 48, tzinfo=UTC),
             destination="London Bridge",
             status=TrainStatus.ON_TIME,
             platform="1",

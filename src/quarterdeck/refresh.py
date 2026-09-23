@@ -24,6 +24,7 @@ from quarterdeck.services.weather import fetch_weather
 
 class ErrorKind(StrEnum):
     AUTH = "auth"
+    RATE_LIMITED = "rate_limited"
     TRANSIENT = "transient"
     UNKNOWN = "unknown"
 
@@ -37,9 +38,24 @@ def classify_error(exc: BaseException) -> ErrorKind:
     """
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
         return ErrorKind.AUTH
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        return ErrorKind.RATE_LIMITED
     if isinstance(exc, httpx.TransportError):
         return ErrorKind.TRANSIENT
     return ErrorKind.UNKNOWN
+
+
+def _retry_after_seconds(exc: BaseException) -> float | None:
+    """Extract a 429 response's Retry-After, so the refresher can wait out
+    the lockout instead of spending the remaining budget poking it."""
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return None
+    if exc.response.status_code != 429:
+        return None
+    header = exc.response.headers.get("retry-after")
+    if header is None or not header.isdigit():
+        return None
+    return float(header)
 
 
 @dataclass(frozen=True)
@@ -56,6 +72,7 @@ class Snapshot[T]:
     fetched_at: datetime | None = None
     error: str | None = None
     error_kind: ErrorKind | None = None
+    retry_after_seconds: float | None = None
 
     @property
     def is_stale(self) -> bool:
@@ -110,6 +127,7 @@ class Refresher[T]:
                 fetched_at=self.snapshot.fetched_at,
                 error=error_message,
                 error_kind=kind,
+                retry_after_seconds=_retry_after_seconds(exc),
             )
             return
 
@@ -119,6 +137,10 @@ class Refresher[T]:
 
     def _next_interval(self) -> float:
         if self.snapshot.error is not None:
+            if self.snapshot.retry_after_seconds is not None:
+                # Respect the server's lockout window, with a small buffer so
+                # the retry lands after it has definitely reopened
+                return max(self._retry_interval_seconds, self.snapshot.retry_after_seconds + 5)
             return self._retry_interval_seconds
         data = self.snapshot.data
         if self._is_degraded is not None and data is not None and self._is_degraded(data):
@@ -156,7 +178,11 @@ def build_sources() -> Sources:
         weather=Refresher(
             "weather", fetch_weather, interval_seconds=1800, retry_interval_seconds=120
         ),
-        trains=Refresher("trains", fetch_train_board, interval_seconds=30),
+        # Trains make 3 RTT calls per cycle against a 100/hour, 1000/day
+        # free-tier budget; 5 minutes keeps usage at ~36/hour with headroom
+        # for restarts. The displayed countdown is computed at render time,
+        # so it stays live between refreshes.
+        trains=Refresher("trains", fetch_train_board, interval_seconds=300),
         agenda=Refresher(
             "agenda",
             fetch_agenda,

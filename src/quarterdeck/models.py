@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -29,11 +29,23 @@ class TrainStatus(StrEnum):
 class TrainDeparture(BaseModel):
     scheduled: time
     expected: time | None = None
-    minutes_away: int
+    departs_at: datetime
     destination: str
     status: TrainStatus
     platform: str | None = None
     service_uid: str = ""
+
+    @property
+    def minutes_away(self) -> int:
+        """Signed minutes until the effective departure, computed at access
+        time so the countdown stays live between background refreshes.
+        Negative once the train has left."""
+        return int((self.departs_at - datetime.now(tz=UTC)).total_seconds() // 60)
+
+    @property
+    def display_minutes(self) -> int:
+        """Countdown for display, floored at zero once the train has left."""
+        return max(0, self.minutes_away)
 
 
 class TrainDestinationGroup(BaseModel):

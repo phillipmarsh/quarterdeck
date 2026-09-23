@@ -52,7 +52,7 @@ def _resolve_destination_name(service: dict) -> str:
     return destinations[0].get("location", {}).get("description", "Unknown")
 
 
-def _parse_departure(service: dict, now: datetime) -> TrainDeparture | None:
+def _parse_departure(service: dict) -> TrainDeparture | None:
     """Convert a location line-up object into a TrainDeparture.
 
     Returns None for services that do not belong on a departure board:
@@ -88,12 +88,11 @@ def _parse_departure(service: dict, now: datetime) -> TrainDeparture | None:
         status = TrainStatus.LATE
 
     effective_dt = expected_dt if expected_dt is not None else scheduled_dt
-    minutes_away = int((effective_dt - now).total_seconds() // 60)
 
     return TrainDeparture(
         scheduled=scheduled_dt.astimezone(LONDON_TZ).time(),
         expected=expected_dt.astimezone(LONDON_TZ).time() if expected_dt is not None else None,
-        minutes_away=minutes_away,
+        departs_at=effective_dt,
         destination=_resolve_destination_name(service),
         status=status,
         platform=_resolve_platform(service),
@@ -101,13 +100,13 @@ def _parse_departure(service: dict, now: datetime) -> TrainDeparture | None:
     )
 
 
-def _parse_services(line_up: dict, now: datetime) -> list[TrainDeparture]:
+def _parse_services(line_up: dict) -> list[TrainDeparture]:
     departures: list[TrainDeparture] = []
     for service in line_up.get("services", []) or []:
-        departure = _parse_departure(service, now)
+        departure = _parse_departure(service)
         if departure is not None and departure.minutes_away >= 0:
             departures.append(departure)
-    return sorted(departures, key=lambda d: d.minutes_away)
+    return sorted(departures, key=lambda d: d.departs_at)
 
 
 # CRS -> station name, resolved once per process from /data/stops (the
@@ -171,7 +170,7 @@ async def fetch_train_board() -> TrainBoard:
         TrainDestinationGroup(
             destination_name=station_names.get(dest_crs, dest_crs),
             destination_crs=dest_crs,
-            departures=_parse_services(line_up, now),
+            departures=_parse_services(line_up),
         )
         for dest_crs, line_up in zip(destinations, destination_data, strict=True)
     ]
@@ -179,6 +178,6 @@ async def fetch_train_board() -> TrainBoard:
     return TrainBoard(
         station_name=station_name,
         destination_groups=destination_groups,
-        all_departures=_parse_services(all_data, now),
+        all_departures=_parse_services(all_data),
         fetched_at=now,
     )

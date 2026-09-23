@@ -54,7 +54,10 @@ accepted and normalised to `https://` automatically.
 ## Data refresh
 
 Data is fetched by background loops, not per request: weather every
-30 minutes, trains every 30 seconds, calendar every 5 minutes. If a
+30 minutes, trains every 5 minutes (three RTT calls per cycle against
+the free tier's 100/hour, 1,000/day budget — a 429's Retry-After is
+respected), calendar every 5 minutes. The train countdown is computed
+at render time, so it stays live between refreshes. If a
 refresh fails, panels keep showing the last good data with an
 "As of HH:MM" marker, and the source retries on a shorter interval
 until it recovers. A panel only shows an error when a source has
