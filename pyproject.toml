@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "Hallway dashboard showing weather, trains, and calendar events"
 readme = "README.md"
 authors = [
-    { name = "Phil Marsh", email = "phil@unitary.ai" }
+    { name = "Phil Marsh", email = "phillipmarsh@live.co.uk" }
 ]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

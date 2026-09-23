@@ -319,6 +319,18 @@ footer {
     font-style: italic;
 }
 
+/* Data source attribution */
+.credits {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 0.3rem 0;
+}
+
+.credits a {
+    color: var(--text-dim);
+}
+
 /* HTMX loading indicator */
 .htmx-request .htmx-indicator {
     opacity: 1;

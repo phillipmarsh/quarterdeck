@@ -48,7 +48,8 @@ All configuration is via environment variables (see `.env.example`):
 | `WEATHER_LONGITUDE` | Weather location longitude | `-0.0492` |
 | `ICAL_FEED_URLS` | Comma-separated iCal feed URLs | |
 
-Note: iCal URLs must use `https://` — replace any `webcal://` prefix.
+Note: `webcal://` iCal URLs (as produced by Apple's share sheet) are
+accepted and normalised to `https://` automatically.
 
 ## Data refresh
 
@@ -57,22 +58,18 @@ Data is fetched by background loops, not per request: weather every
 refresh fails, panels keep showing the last good data with an
 "As of HH:MM" marker, and the source retries on a shorter interval
 until it recovers. A panel only shows an error when a source has
-never succeeded — including a "check RTT credentials" hint when the
-trains API rejects the configured credentials.
+never succeeded — including a "check RTT API token" hint when the
+trains API rejects the configured token.
 
 ## Deploy to Raspberry Pi
 
 ### 1. Get the code onto the Pi
 
-Push to a Git remote and clone:
+Clone from GitHub:
 
 ```bash
-# On your Mac
-git remote add origin git@github.com:youruser/quarterdeck.git
-git push -u origin main
-
 # On the Pi
-git clone git@github.com:youruser/quarterdeck.git ~/quarterdeck
+git clone https://github.com/phillipmarsh/quarterdeck.git ~/quarterdeck
 ```
 
 Or rsync directly:
@@ -206,3 +203,13 @@ uv run ruff check src/ tests/
 # Type check
 uv run pyright src/ tests/
 ```
+
+## Data sources
+
+- Weather by [Open-Meteo](https://open-meteo.com/) (CC BY 4.0)
+- Train data by [Realtime Trains](https://www.realtimetrains.co.uk/)
+- Calendar events from your own iCal feeds (Google Calendar, iCloud)
+
+## Licence
+
+[Apache 2.0](LICENSE)
