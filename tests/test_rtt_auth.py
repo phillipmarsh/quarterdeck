@@ -4,6 +4,7 @@ import respx
 import time_machine
 
 import quarterdeck.services.rtt_auth as rtt_auth_mod
+from quarterdeck.config import Settings
 from quarterdeck.services.rtt_auth import RTT_BASE_URL, resolve_access_token
 
 EXCHANGE_RESPONSE = {
@@ -16,7 +17,7 @@ EXCHANGE_RESPONSE = {
 @pytest.fixture
 def configured_token(monkeypatch: pytest.MonkeyPatch) -> str:
     token = "long-life-refresh-token"
-    monkeypatch.setattr(rtt_auth_mod, "settings", type("S", (), {"rtt_api_token": token})())
+    monkeypatch.setattr(rtt_auth_mod, "settings", Settings.model_construct(rtt_api_token=token))
     return token
 
 
@@ -25,7 +26,7 @@ class TestResolveAccessToken:
 
     async def test_no_configured_token_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Given no configured token, when resolved, then an empty string is returned."""
-        monkeypatch.setattr(rtt_auth_mod, "settings", type("S", (), {"rtt_api_token": ""})())
+        monkeypatch.setattr(rtt_auth_mod, "settings", Settings.model_construct(rtt_api_token=""))
 
         async with httpx.AsyncClient() as client:
             assert await resolve_access_token(client) == ""

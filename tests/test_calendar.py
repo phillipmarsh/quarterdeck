@@ -5,6 +5,8 @@ import pytest
 import respx
 import time_machine
 
+import quarterdeck.services.calendar as cal_mod
+from quarterdeck.config import Settings
 from quarterdeck.models import CalendarEvent
 from quarterdeck.services.calendar import (
     CalendarFeedError,
@@ -186,28 +188,23 @@ class TestSortEvents:
         assert sorted_events[1].summary == "Late meeting"
 
 
+def _configure_feeds(monkeypatch: pytest.MonkeyPatch, *urls: str) -> None:
+    """Point the calendar service at the given feed URLs, ignoring any local .env."""
+    settings = Settings.model_construct(ical_feed_urls=",".join(urls))
+    monkeypatch.setattr(cal_mod, "settings", settings)
+
+
 class TestFetchAgenda:
     """Test the full agenda fetching flow."""
 
     @time_machine.travel("2026-02-17T10:00:00Z")
     @respx.mock
-    async def test_fetches_and_merges_multiple_feeds(self, monkeypatch: object) -> None:
+    async def test_fetches_and_merges_multiple_feeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Given two iCal feeds, when fetched, then events from both are merged and sorted."""
-        import quarterdeck.services.calendar as cal_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "feed_url_list": [
-                        "https://cal.example.com/feed1.ics",
-                        "https://cal.example.com/feed2.ics",
-                    ],
-                },
-            )(),
+        _configure_feeds(
+            monkeypatch,
+            "https://cal.example.com/feed1.ics",
+            "https://cal.example.com/feed2.ics",
         )
 
         feed1 = """\
@@ -243,25 +240,14 @@ END:VCALENDAR
 
     @time_machine.travel("2026-02-17T10:00:00Z")
     @respx.mock
-    async def test_continues_when_one_feed_fails(self, monkeypatch: object) -> None:
+    async def test_continues_when_one_feed_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Given one failing feed, when fetched,
         then events from working feeds are still returned.
         """
-        import quarterdeck.services.calendar as cal_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "feed_url_list": [
-                        "https://cal.example.com/broken.ics",
-                        "https://cal.example.com/good.ics",
-                    ],
-                },
-            )(),
+        _configure_feeds(
+            monkeypatch,
+            "https://cal.example.com/broken.ics",
+            "https://cal.example.com/good.ics",
         )
 
         good_feed = """\
@@ -287,25 +273,14 @@ END:VCALENDAR
 
     @time_machine.travel("2026-02-17T10:00:00Z")
     @respx.mock
-    async def test_raises_when_all_feeds_fail(self, monkeypatch: object) -> None:
+    async def test_raises_when_all_feeds_fail(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Given every configured feed failing, when fetched,
         then CalendarFeedError is raised rather than an empty agenda returned.
         """
-        import quarterdeck.services.calendar as cal_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "feed_url_list": [
-                        "https://cal.example.com/broken1.ics",
-                        "https://cal.example.com/broken2.ics",
-                    ],
-                },
-            )(),
+        _configure_feeds(
+            monkeypatch,
+            "https://cal.example.com/broken1.ics",
+            "https://cal.example.com/broken2.ics",
         )
 
         respx.get("https://cal.example.com/broken1.ics").mock(return_value=httpx.Response(500))
@@ -315,17 +290,13 @@ END:VCALENDAR
             await fetch_agenda()
 
     @time_machine.travel("2026-02-17T10:00:00Z")
-    async def test_returns_unconfigured_agenda_when_no_feeds(self, monkeypatch: object) -> None:
+    async def test_returns_unconfigured_agenda_when_no_feeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given no configured feeds, when fetched,
         then an empty agenda with a zero feed count is returned.
         """
-        import quarterdeck.services.calendar as cal_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            cal_mod,
-            "settings",
-            type("S", (), {"feed_url_list": []})(),
-        )
+        _configure_feeds(monkeypatch)
 
         agenda = await fetch_agenda()
 

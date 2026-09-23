@@ -1,9 +1,13 @@
 from datetime import UTC, datetime, time
 
 import httpx
+import pytest
 import respx
 import time_machine
 
+import quarterdeck.services.rtt_auth as rtt_auth_mod
+import quarterdeck.services.trains as trains_mod
+from quarterdeck.config import Settings
 from quarterdeck.models import TrainStatus
 from quarterdeck.services.rtt_auth import RTT_BASE_URL
 from quarterdeck.services.trains import (
@@ -261,31 +265,20 @@ class TestFetchTrainBoard:
 
     @time_machine.travel("2026-02-17T09:42:00Z")
     @respx.mock
-    async def test_fetches_all_and_filtered_departures(self, monkeypatch: object) -> None:
+    async def test_fetches_all_and_filtered_departures(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given next-generation API responses, when fetched,
         then both all and per-destination departures are returned
         using an exchanged access token.
         """
-        import quarterdeck.services.rtt_auth as rtt_auth_mod
-        import quarterdeck.services.trains as trains_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            trains_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "train_station_crs": "FOH",
-                    "destination_list": ["LBG", "HHY"],
-                },
-            )(),
+        settings = Settings.model_construct(
+            train_station_crs="FOH",
+            train_destinations="LBG,HHY",
+            rtt_api_token="refresh-token",
         )
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            rtt_auth_mod,
-            "settings",
-            type("S", (), {"rtt_api_token": "refresh-token"})(),
-        )
+        monkeypatch.setattr(trains_mod, "settings", settings)
+        monkeypatch.setattr(rtt_auth_mod, "settings", settings)
 
         respx.get(f"{RTT_BASE_URL}/api/get_access_token").mock(
             return_value=httpx.Response(200, json=MOCK_EXCHANGE_RESPONSE)
@@ -318,30 +311,17 @@ class TestFetchTrainBoard:
 
     @time_machine.travel("2026-02-17T09:42:00Z")
     @respx.mock
-    async def test_no_services_returns_empty_board(self, monkeypatch: object) -> None:
+    async def test_no_services_returns_empty_board(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Given a 204 no-services response, when fetched,
         then an empty board with the CRS as station name is returned.
         """
-        import quarterdeck.services.rtt_auth as rtt_auth_mod
-        import quarterdeck.services.trains as trains_mod
-
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            trains_mod,
-            "settings",
-            type(
-                "S",
-                (),
-                {
-                    "train_station_crs": "FOH",
-                    "destination_list": [],
-                },
-            )(),
+        settings = Settings.model_construct(
+            train_station_crs="FOH",
+            train_destinations="",
+            rtt_api_token="refresh-token",
         )
-        monkeypatch.setattr(  # type: ignore[attr-defined]
-            rtt_auth_mod,
-            "settings",
-            type("S", (), {"rtt_api_token": "refresh-token"})(),
-        )
+        monkeypatch.setattr(trains_mod, "settings", settings)
+        monkeypatch.setattr(rtt_auth_mod, "settings", settings)
 
         respx.get(f"{RTT_BASE_URL}/api/get_access_token").mock(
             return_value=httpx.Response(200, json=MOCK_EXCHANGE_RESPONSE)
